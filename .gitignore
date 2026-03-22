@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+*.egg-info/
+dist/
+build/
+.eggs/
+
+# Virtual environments
+venv/
+env/
+.env/
+
+# Model files
+*.pkl
+
+# Report outputs
+forgery_report.png
+
+# macOS
+.DS_Store
+
+# IDE
+.vscode/
+.idea/
