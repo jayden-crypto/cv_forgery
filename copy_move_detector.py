@@ -26,7 +26,7 @@ def _self_match_descriptors(descriptors: np.ndarray,
                             min_dist: float = MIN_SPATIAL_DIST) -> list:
     
     index_params = dict(algorithm=FLANN_INDEX_KDTREE, trees=5)
-    search_params = dict(checks=100)
+    search_params = dict(checks=50)
     flann = cv2.FlannBasedMatcher(index_params, search_params)
 
     raw_matches = flann.knnMatch(descriptors, descriptors, k=3)
@@ -111,7 +111,7 @@ def _build_forgery_mask(image_shape: tuple,
 # ────────────────────────────────────────────────────────────────
 
 def detect_copy_move(preprocessed: dict,
-                     n_features: int = 3000) -> dict:
+                     n_features: int = 1500) -> dict:
     
     gray = preprocessed["y_eq"]
     h, w = gray.shape[:2]

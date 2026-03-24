@@ -22,8 +22,8 @@ from feature_extraction import (
 
 BLOCK_SIZE = 64
 BLOCK_STRIDE = 32
-ANOMALY_PERCENTILE = 92
-MIN_FLAGGED_RATIO = 0.12
+ANOMALY_PERCENTILE = 85
+MIN_FLAGGED_RATIO = 0.20
 PCA_COMPONENTS = 30
 
 # ────────────────────────────────────────────────────────────────
@@ -209,16 +209,21 @@ def detect_splicing(preprocessed: dict,
             50.0 * min(1.0, mean_dist / 2.0)
         ))
     else:
-        result["detected"] = flagged_ratio >= MIN_FLAGGED_RATIO
         if scores.max() > 0:
             top_scores = scores[scores > np.percentile(scores, ANOMALY_PERCENTILE)]
             score_strength = np.mean(top_scores) / (np.mean(scores) + 1e-8)
+            score_std_ratio = np.std(scores) / (np.mean(scores) + 1e-8)
+            
+            is_significant = (score_strength > 1.6) and (score_std_ratio > 0.45)
+            result["detected"] = is_significant
+            
             conf = min(100.0, (
-                40.0 * min(1.0, flagged_ratio / 0.25) +
-                35.0 * min(1.0, score_strength / 3.0) +
-                25.0 * min(1.0, np.std(scores) / (np.mean(scores) + 1e-8))
+                40.0 * min(1.0, flagged_ratio / 0.20) +
+                35.0 * min(1.0, score_strength / 4.0) +
+                25.0 * min(1.0, score_std_ratio / 1.5)
             ))
         else:
+            result["detected"] = False
             conf = 0.0
 
     result["confidence"] = round(conf, 1)

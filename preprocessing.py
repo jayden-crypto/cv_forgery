@@ -52,8 +52,16 @@ def gaussian_blur(image: np.ndarray, ksize: int = 3) -> np.ndarray:
 #  Main preprocessing entry point
 # ────────────────────────────────────────────────────────────────
 
-def preprocess_image(image_bgr: np.ndarray) -> dict:
-    
+def resize_if_large(image_bgr: np.ndarray, max_dim: int = 1024) -> np.ndarray:
+    h, w = image_bgr.shape[:2]
+    if max(h, w) > max_dim:
+        scale = max_dim / max(h, w)
+        new_w, new_h = int(w * scale), int(h * scale)
+        return cv2.resize(image_bgr, (new_w, new_h), interpolation=cv2.INTER_AREA)
+    return image_bgr
+
+def preprocess_image(image_bgr: np.ndarray, max_dim: int = 1024) -> dict:
+    image_bgr = resize_if_large(image_bgr, max_dim)
     gray = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2GRAY)
     gray_smooth = gaussian_blur(gray, ksize=3)
 

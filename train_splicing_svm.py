@@ -36,12 +36,14 @@ IMAGE_EXTENSIONS = {".jpg", ".jpeg", ".png", ".bmp", ".tif", ".tiff"}
 # ────────────────────────────────────────────────────────────────
 
 def _list_images(directory: str) -> list:
-    
+    import random
     paths = []
     for fname in sorted(os.listdir(directory)):
         if os.path.splitext(fname)[1].lower() in IMAGE_EXTENSIONS:
             paths.append(os.path.join(directory, fname))
-    return paths
+    random.seed(42)
+    random.shuffle(paths)
+    return paths[:100]
 
 def _extract_block_features(block_gray: np.ndarray,
                             gabor_bank: list) -> np.ndarray:

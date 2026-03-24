@@ -56,7 +56,7 @@ def _decide_verdict(cm_result: dict, sp_result: dict) -> tuple:
 # ────────────────────────────────────────────────────────────────
 
 def run_detection(image_path: str,
-                  model_path: str = None,
+                  model_path: str = "splicing_svm_model.pkl",
                   output_path: str = "forgery_report.png") -> dict:
     
     # ── Load Image ────────────────────────────────────────────
@@ -155,7 +155,7 @@ def main():
     )
     parser.add_argument("--image", default="test.jpg",
                         help="Path to input image (default: test.jpg)")
-    parser.add_argument("--model", default=None,
+    parser.add_argument("--model", default="splicing_svm_model.pkl",
                         help="Path to trained SVM model (.pkl) for splicing "
                              "detection. If not provided, uses unsupervised "
                              "anomaly detection.")
