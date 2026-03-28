@@ -106,14 +106,15 @@ If you don't want to download a dataset, you can create test images:
 
 ## Project Structure
 
-```
+```text
 forgery_detector.py        — CLI entrypoint (run this)
 preprocessing.py           — YCbCr, CLAHE, Canny, LOG, DOG, Fourier
 feature_extraction.py      — SIFT, HOG, LBP, Gabor, DWT extractors
 copy_move_detector.py      — SIFT self-matching + RANSAC homography
-splicing_detector.py       — Block-level LBP+Gabor+DWT → SVM/Mahalanobis
+splicing_detector.py       — Block-level LBP+Gabor+DWT → LinearSVC/Mahalanobis
 visualization.py           — Heatmap overlays + forensic report panels
-train_splicing_svm.py      — SVM training script (optional)
+train_splicing_svm.py      — LinearSVC training script (optional)
+evaluate_dataset.py        — Dataset evaluation script (accuracy, F1-score, etc.)
 requirements.txt           — Python dependencies
 ```
 
@@ -131,7 +132,7 @@ requirements.txt           — Python dependencies
 ### Splicing Detection Pipeline
 1. Divide image into 64×64 overlapping blocks (stride 32)
 2. Per block: extract LBP histogram + Gabor stats + DWT energies
-3. **If SVM model available**: PCA reduction → LinearSVC classification per block
+3. **If LinearSVC model available**: PCA reduction → LinearSVC classification per block
 4. **If no model**: Mahalanobis distance from feature distribution (unsupervised)
 5. Aggregate block-level scores into decision + heatmap
 6. If ≥8% blocks flagged → Splicing Forgery Detected
