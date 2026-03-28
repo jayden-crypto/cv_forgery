@@ -13,6 +13,7 @@ A production-ready image forgery detection system using **classical computer vis
 | Edge Analysis | Canny Edge Detector, LOG, DOG |
 | Filtering & Enhancement | Convolution, Fourier Transform, Histogram Processing (CLAHE) |
 | Classification | LinearSVC (supervised, high-performance SVM), PCA (dimensionality reduction), Mahalanobis Distance |
+| Post-Processing | Fuzzy C-Means (FCM) Clustering for smoothed heatmap localization |
 
 > **No deep learning, CNNs, or transformers are used.**
 
@@ -134,5 +135,6 @@ requirements.txt           — Python dependencies
 2. Per block: extract LBP histogram + Gabor stats + DWT energies
 3. **If LinearSVC model available**: PCA reduction → LinearSVC classification per block
 4. **If no model**: Mahalanobis distance from feature distribution (unsupervised)
-5. Aggregate block-level scores into decision + heatmap
-6. If ≥8% blocks flagged → Splicing Forgery Detected
+5. **Post-Processing**: Apply Fuzzy C-Means (FCM) clustering to the output scores + spatial coordinates to generate a smooth, localized heatmap that filters out isolated false-positive blocks.
+6. Aggregate hard block-level classifications into a final binary decision
+7. If ≥8% blocks flagged → Splicing Forgery Detected

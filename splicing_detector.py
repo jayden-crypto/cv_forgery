@@ -195,6 +195,40 @@ def detect_splicing(preprocessed: dict,
 
     result["n_flagged"] = n_flagged
 
+    # ── Step 2.5: Fuzzy C-Means Clustering (FCM) ──────────────
+    if n_flagged > 0 and len(scores_norm) >= 2 and scores_norm.max() > 0:
+        print("    [Splicing] Applying Fuzzy C-Means to refine heatmap…")
+        try:
+            import skfuzzy as fuzz
+            
+            pos_array = np.array(positions, dtype=float)
+            pos_array[:, 0] /= max(1.0, float(h))
+            pos_array[:, 1] /= max(1.0, float(w))
+            
+            # Feature matrix (3, n_blocks). We weight the anomaly score strongly (3.0) 
+            # while using spatial coordinates to enforce cohesive contiguous clusters.
+            data = np.vstack((scores_norm * 3.0, pos_array[:, 0], pos_array[:, 1]))
+            
+            cntr, u, u0, d, jm, p, fpc = fuzz.cluster.cmeans(
+                data, c=2, m=2.0, error=0.005, maxiter=1000, init=None
+            )
+            
+            c0_avg = np.average(scores_norm, weights=u[0])
+            c1_avg = np.average(scores_norm, weights=u[1])
+            tampered_c = 0 if c0_avg > c1_avg else 1
+            
+            fcm_scores = u[tampered_c]
+            
+            # Only accept refinement if the split separates anomalous blocks properly
+            if max(c0_avg, c1_avg) > min(c0_avg, c1_avg) * 1.5:
+                # We update scores_norm for a smoother heatmap visual, 
+                # but we DO NOT overwrite n_flagged to prevent massive false positives 
+                # on mostly-authentic images with only a few noisy blocks.
+                scores_norm = fcm_scores
+                
+        except ImportError:
+            print("    [Splicing] WARNING: scikit-fuzzy not installed. Skipping FCM.")
+
     # ── Step 3: Build heatmap ─────────────────────────────────
     result["heatmap"] = _build_heatmap((h, w), positions, scores_norm)
 
