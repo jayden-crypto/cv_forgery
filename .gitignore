@@ -20,6 +20,10 @@ env/
 # Report outputs
 forgery_report.png
 
+# Datasets
+Dataset/
+dataset/
+
 # macOS
 .DS_Store
 
