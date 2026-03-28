@@ -73,7 +73,7 @@ This script runs the pipeline across your dataset and computes standard metrics.
 
 > **Note:** The main `Dataset/` folder used for testing and training is approximately 3.8GB. To keep the repository lightweight, it has been excluded from version control via `.gitignore`.
 > 
-> **Download the dataset here:** [Insert Your Dataset Link Here]
+> **Download the dataset here:** [Kaggle - Image Forgery Detection Dataset](https://www.kaggle.com/datasets/labid93/image-forgery-detection)
 > 
 > Once downloaded, extract the files so that the `Dataset/` folder is placed in the root of this project directory.
 
