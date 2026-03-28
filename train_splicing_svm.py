@@ -7,7 +7,7 @@ import pickle
 
 import cv2
 import numpy as np
-from sklearn.svm import SVC
+from sklearn.svm import LinearSVC
 from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split, GridSearchCV
@@ -43,7 +43,7 @@ def _list_images(directory: str) -> list:
             paths.append(os.path.join(directory, fname))
     random.seed(42)
     random.shuffle(paths)
-    return paths[:100]
+    return paths
 
 def _extract_block_features(block_gray: np.ndarray,
                             gabor_bank: list) -> np.ndarray:
@@ -134,12 +134,11 @@ def train(authentic_dir: str, spliced_dir: str,
 
     print("[TRAIN] Grid-searching SVM hyperparameters…")
     param_grid = {
-        "C": [0.1, 1, 10, 100],
-        "gamma": ["scale", "auto", 0.01, 0.1],
+        "C": [0.01, 0.1, 1, 10, 100]
     }
     svm = GridSearchCV(
-        SVC(kernel="rbf", probability=True),
-        param_grid, cv=3, scoring="f1", n_jobs=-1, verbose=0,
+        LinearSVC(dual=False, max_iter=2000),
+        param_grid, cv=3, scoring="f1", n_jobs=-1, verbose=3,
     )
     svm.fit(X_train_pca, y_train)
 

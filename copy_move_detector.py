@@ -3,6 +3,7 @@
 import cv2
 import numpy as np
 from typing import Optional
+from sklearn.cluster import DBSCAN
 
 from feature_extraction import extract_sift_features
 
@@ -144,6 +145,22 @@ def detect_copy_move(preprocessed: dict,
 
     if H is None:
         result["confidence"] = min(30.0, len(good_matches) * 1.5)
+        return result
+
+    # --- ADVANCED FILTERING: DBSCAN Spatial Clustering ---
+    # A true copy-move forgery will have matched points geometrically concentrated in at least 2 dense regions (source and destination).
+    inlier_idx = [i for i, val in enumerate(inlier_mask.flatten()) if val]
+    pts_src = np.array([keypoints[good_matches[i][0]].pt for i in inlier_idx])
+    pts_dst = np.array([keypoints[good_matches[i][1]].pt for i in inlier_idx])
+    
+    all_pts = np.vstack((pts_src, pts_dst))
+    clustering = DBSCAN(eps=40, min_samples=4).fit(all_pts)
+    n_clusters = len(set(clustering.labels_)) - (1 if -1 in clustering.labels_ else 0)
+    
+    if n_clusters < 2:
+        # Rejected by Spatial Filter: Matches do not form distinct source/destination geometrical clusters
+        result["confidence"] = 5.0
+        result["detected"] = False
         return result
 
     n_inliers = int(inlier_mask.sum())
