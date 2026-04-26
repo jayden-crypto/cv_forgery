@@ -13,6 +13,9 @@ from feature_extraction import (
     extract_lbp_histogram,
     extract_gabor_features,
     extract_dwt_features,
+    compute_ela_map,
+    extract_ela_features_from_map,
+    extract_noise_residual_features,
     build_gabor_bank,
 )
 
@@ -23,7 +26,8 @@ from feature_extraction import (
 BLOCK_SIZE = 64
 BLOCK_STRIDE = 32
 ANOMALY_PERCENTILE = 85
-MIN_FLAGGED_RATIO = 0.20
+MIN_FLAGGED_RATIO = 0.08
+MAX_FLAGGED_RATIO = 0.85
 PCA_COMPONENTS = 30
 
 # ────────────────────────────────────────────────────────────────
@@ -31,15 +35,18 @@ PCA_COMPONENTS = 30
 # ────────────────────────────────────────────────────────────────
 
 def _extract_block_features(block_gray: np.ndarray,
-                            gabor_bank: list) -> np.ndarray:
-    
-    lbp_hist = extract_lbp_histogram(block_gray, radius=1, n_points=8)
+                            gabor_bank: list,
+                            ela_patch: np.ndarray = None) -> np.ndarray:
 
+    lbp_hist   = extract_lbp_histogram(block_gray, radius=1, n_points=8)
     gabor_feat = extract_gabor_features(block_gray, gabor_bank)
+    dwt_feat   = extract_dwt_features(block_gray, wavelet="haar", level=2)
+    ela_feat   = (extract_ela_features_from_map(ela_patch)
+                  if ela_patch is not None
+                  else extract_ela_features_from_map(compute_ela_map(block_gray)))
+    noise_feat = extract_noise_residual_features(block_gray)
 
-    dwt_feat = extract_dwt_features(block_gray, wavelet="haar", level=2)
-
-    return np.concatenate([lbp_hist, gabor_feat, dwt_feat])
+    return np.concatenate([lbp_hist, gabor_feat, dwt_feat, ela_feat, noise_feat])
 
 def extract_block_features_grid(gray: np.ndarray,
                                 block_size: int = BLOCK_SIZE,
@@ -47,14 +54,16 @@ def extract_block_features_grid(gray: np.ndarray,
     
     h, w = gray.shape[:2]
     gabor_bank = build_gabor_bank()
+    ela_map    = compute_ela_map(gray)   # computed once for the whole image
 
     features_list = []
     positions = []
 
     for r in range(0, h - block_size + 1, stride):
         for c in range(0, w - block_size + 1, stride):
-            block = gray[r:r + block_size, c:c + block_size]
-            feat = _extract_block_features(block, gabor_bank)
+            block     = gray[r:r + block_size, c:c + block_size]
+            ela_patch = ela_map[r:r + block_size, c:c + block_size]
+            feat = _extract_block_features(block, gabor_bank, ela_patch)
             features_list.append(feat)
             positions.append((r, c))
 
@@ -236,7 +245,8 @@ def detect_splicing(preprocessed: dict,
     flagged_ratio = n_flagged / max(1, len(features))
 
     if use_svm:
-        result["detected"] = n_flagged > 0 and flagged_ratio >= MIN_FLAGGED_RATIO
+        in_range = MIN_FLAGGED_RATIO <= flagged_ratio <= MAX_FLAGGED_RATIO
+        result["detected"] = n_flagged > 0 and in_range
         mean_dist = np.mean(scores[scores > 0]) if np.any(scores > 0) else 0
         conf = min(100.0, (
             50.0 * min(1.0, flagged_ratio / 0.3) +

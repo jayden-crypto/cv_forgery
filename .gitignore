@@ -19,10 +19,20 @@ env/
 
 # Report outputs
 forgery_report.png
+authentic_report.png
+forged_report.png
+*_report.png
+test.jpg
+
+# PPT / presentation visuals
+ppt_*.png
+generate_ppt_visuals.py
 
 # Datasets
 Dataset/
 dataset/
+CASIA2/
+Columbia/
 
 # macOS
 .DS_Store

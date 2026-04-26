@@ -9,7 +9,7 @@ A production-ready image forgery detection system using **classical computer vis
 
 | Category | Techniques |
 |----------|-----------|
-| Feature Extraction | SIFT, HOG, LBP (uniform), Gabor Filters, DWT |
+| Feature Extraction | SIFT, HOG, LBP (uniform), Gabor Filters, DWT, ELA, Noise Residual |
 | Edge Analysis | Canny Edge Detector, LOG, DOG |
 | Filtering & Enhancement | Convolution, Fourier Transform, Histogram Processing (CLAHE) |
 | Classification | LinearSVC (supervised, high-performance SVM), PCA (dimensionality reduction), Mahalanobis Distance |
@@ -54,6 +54,35 @@ python train_splicing_svm.py \
     --output    splicing_svm_model.pkl
 ```
 
+Multiple directories are supported — useful for combining datasets:
+
+```bash
+python train_splicing_svm.py \
+    --authentic dir1/Au dir2/Original \
+    --spliced   dir1/Tp dir2/Forged \
+    --output    splicing_svm_model.pkl
+```
+
+If ground-truth tamper masks are available, pass them with `--masks` (one directory per spliced directory). Where masks are missing, ELA pseudo-masks are used as a fallback:
+
+```bash
+python train_splicing_svm.py \
+    --authentic path/to/Au \
+    --spliced   path/to/Tp \
+    --masks     path/to/Groundtruth \
+    --output    splicing_svm_model.pkl
+```
+
+Use `--image-level` when no masks are available and you want the fastest, most reliable training — all blocks from spliced images are labelled as class 1:
+
+```bash
+python train_splicing_svm.py \
+    --authentic path/to/Original \
+    --spliced   path/to/Forged \
+    --image-level \
+    --output    splicing_svm_model.pkl
+```
+
 Then use the model:
 ```bash
 python forgery_detector.py --image test.jpg --model splicing_svm_model.pkl
@@ -64,55 +93,34 @@ python forgery_detector.py --image test.jpg --model splicing_svm_model.pkl
 You can evaluate the performance of the detector (Accuracy, Precision, Recall, F1-Score) using the provided evaluation script:
 
 ```bash
-python evaluate_dataset.py --authentic path/to/authentic/ --forged path/to/forged/ --limit 50
+python evaluate_dataset.py --authentic path/to/authentic/ --forged path/to/forged/ --limit 100
 ```
 
-This script runs the pipeline across your dataset and computes standard metrics. Using the `LinearSVC` model, the pipeline achieves an **F1-Score of ~78%** and **Recall of ~88%** on a standard 100-image evaluation sample.
+This script runs the full pipeline across your dataset and computes standard metrics. The `--limit N` flag samples N images **per class**. Using the LinearSVC model trained on the Kaggle dataset with image-level labels, the pipeline achieves:
+
+| Metric | Score |
+|--------|-------|
+| Accuracy | 89.8% |
+| Precision | 93% |
+| Recall | 86% |
+| F1-Score | **89.3%** |
 
 ## Default Dataset
 
-> **Note:** The main `Dataset/` folder used for testing and training is approximately 3.8GB. To keep the repository lightweight, it has been excluded from version control via `.gitignore`.
-> 
-> **Download the dataset here:** [Kaggle - Image Forgery Detection Dataset](https://www.kaggle.com/datasets/labid93/image-forgery-detection)
-> 
+> **Note:** The `Dataset/` folder used for testing and training is approximately 3.8 GB. To keep the repository lightweight, it has been excluded from version control via `.gitignore`.
+>
+> **Download the dataset here:** [Kaggle — Image Forgery Detection Dataset](https://www.kaggle.com/datasets/labid93/image-forgery-detection)
+>
 > Once downloaded, extract the files so that the `Dataset/` folder is placed in the root of this project directory.
-
-## Test Datasets
-
-### CASIA v2.0 (Recommended)
-The CASIA Image Tampering Detection Evaluation Database contains both authentic and tampered images.
-
-1. **Download**: Search for "CASIA v2.0 dataset" on Google — it is available on GitHub mirrors and academic sites:
-   - GitHub mirror: `https://github.com/namtpham/casia2groundtruth`
-   - Kaggle: search "CASIA v2" on kaggle.com/datasets
-2. **Structure**: The dataset contains two folders:
-   - `Au/` — authentic images
-   - `Tp/` — tampered images (both copy-move and spliced)
-
-### Columbia Uncompressed Image Splicing Detection
-1. **Download**: https://www.ee.columbia.edu/ln/dvmm/downloads/authsplcuncmp/
-2. Contains 183 authentic + 180 spliced images
-
-### Creating Your Own Test Images
-
-If you don't want to download a dataset, you can create test images:
-
-```bash
-# Copy-Move test: clone a region in an image using any image editor
-# (select a region, copy, paste elsewhere in the same image)
-
-# Splicing test: paste a region from one image into another
-# (copy an object from image A, paste into image B)
-```
 
 ## Project Structure
 
 ```text
 forgery_detector.py        — CLI entrypoint (run this)
 preprocessing.py           — YCbCr, CLAHE, Canny, LOG, DOG, Fourier
-feature_extraction.py      — SIFT, HOG, LBP, Gabor, DWT extractors
+feature_extraction.py      — SIFT, HOG, LBP, Gabor, DWT, ELA, Noise Residual extractors
 copy_move_detector.py      — SIFT self-matching + RANSAC homography
-splicing_detector.py       — Block-level LBP+Gabor+DWT → LinearSVC/Mahalanobis
+splicing_detector.py       — Block-level features → LinearSVC / Mahalanobis anomaly scoring
 visualization.py           — Heatmap overlays + forensic report panels
 train_splicing_svm.py      — LinearSVC training script (optional)
 evaluate_dataset.py        — Dataset evaluation script (accuracy, F1-score, etc.)
@@ -132,9 +140,16 @@ requirements.txt           — Python dependencies
 
 ### Splicing Detection Pipeline
 1. Divide image into 64×64 overlapping blocks (stride 32)
-2. Per block: extract LBP histogram + Gabor stats + DWT energies
-3. **If LinearSVC model available**: PCA reduction → LinearSVC classification per block
-4. **If no model**: Mahalanobis distance from feature distribution (unsupervised)
-5. **Post-Processing**: Apply Fuzzy C-Means (FCM) clustering to the output scores + spatial coordinates to generate a smooth, localized heatmap that filters out isolated false-positive blocks.
-6. Aggregate hard block-level classifications into a final binary decision
-7. If ≥8% blocks flagged → Splicing Forgery Detected
+2. Per block: extract a **71-dimensional feature vector**:
+   - LBP histogram (10 features)
+   - Gabor filter bank, 4 orientations × 3 scales (24 features)
+   - DWT subband energies, Haar level 2 (21 features)
+   - ELA statistics — mean, std, max, 75th/90th/95th percentile (6 features)
+   - Noise residual at σ = 0.5 / 1.0 / 2.0 + cross-scale std (10 features)
+3. **If LinearSVC model available**: StandardScaler → PCA (30 components) → LinearSVC classification per block
+4. **If no model**: Mahalanobis distance from feature distribution (unsupervised fallback)
+5. **Post-Processing**: Fuzzy C-Means (FCM) clustering on scores + spatial coordinates for a smooth, localized heatmap
+6. Aggregate block-level decisions into a final binary verdict
+7. If 8%–85% of blocks are flagged → Splicing Forgery Detected
+
+> **ELA optimisation:** the full-image ELA map is computed once per image via a single JPEG encode/decode cycle; per-block ELA features are then obtained by slicing the pre-computed map, avoiding ~991k redundant JPEG operations per training epoch.

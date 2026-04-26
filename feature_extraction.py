@@ -142,6 +142,80 @@ def extract_dwt_features(gray: np.ndarray,
 def extract_dwt_subbands(gray: np.ndarray,
                          wavelet: str = "haar",
                          level: int = 2) -> list:
-    
+
     img = gray.astype(np.float64) / 255.0
     return pywt.wavedec2(img, wavelet, level=level)
+
+# ────────────────────────────────────────────────────────────────
+#  ELA (Error Level Analysis) Features
+# ────────────────────────────────────────────────────────────────
+
+def compute_ela_map(gray: np.ndarray, quality: int = 90) -> np.ndarray:
+    """
+    Compute a full-image ELA map (float64) by re-compressing as JPEG once
+    and returning the absolute pixel-wise difference.  Call this once per
+    image, then slice patches for each block with extract_ela_features_from_map
+    to avoid redundant JPEG encode/decode operations.
+    """
+    ok, buf = cv2.imencode(".jpg", gray, [cv2.IMWRITE_JPEG_QUALITY, quality])
+    if not ok:
+        return np.zeros_like(gray, dtype=np.float64)
+    recompressed = cv2.imdecode(buf, cv2.IMREAD_GRAYSCALE)
+    return np.abs(gray.astype(np.float64) - recompressed.astype(np.float64))
+
+def extract_ela_features_from_map(ela_patch: np.ndarray) -> np.ndarray:
+    """
+    Summarise a precomputed ELA patch (a crop of compute_ela_map output)
+    into 6 statistics.  Same feature space as extract_ela_features.
+    """
+    return np.array([
+        ela_patch.mean(),
+        ela_patch.std(),
+        ela_patch.max(),
+        np.percentile(ela_patch, 75),
+        np.percentile(ela_patch, 90),
+        np.percentile(ela_patch, 95),
+    ], dtype=np.float64)
+
+def extract_ela_features(gray: np.ndarray,
+                         quality: int = 90) -> np.ndarray:
+    """
+    Block-level ELA convenience wrapper (encodes the block itself).
+    Prefer compute_ela_map + extract_ela_features_from_map when processing
+    many blocks from the same image to avoid repeated JPEG encode/decode.
+    """
+    return extract_ela_features_from_map(compute_ela_map(gray, quality))
+
+# ────────────────────────────────────────────────────────────────
+#  Noise Residual Features
+# ────────────────────────────────────────────────────────────────
+
+def extract_noise_residual_features(
+        gray: np.ndarray,
+        sigmas: tuple = (0.5, 1.0, 2.0)) -> np.ndarray:
+    """
+    Subtract a Gaussian-blurred version of the block at each sigma to isolate
+    the high-frequency noise residual, then summarise with three statistics per
+    scale and one cross-scale consistency measure (10 features total).
+
+    Spliced blocks originating from a different image have a different camera
+    noise level and distribution than the surrounding authentic content, so
+    residual statistics are discriminative regardless of JPEG compression state —
+    making them the primary complement to ELA on lossless (TIFF) images.
+    """
+    img = gray.astype(np.float64)
+    features = []
+    noise_stds = []
+
+    for sigma in sigmas:
+        residual = img - cv2.GaussianBlur(img, (0, 0), sigma)
+        mean_abs = np.mean(np.abs(residual))
+        std      = np.std(residual)
+        energy   = np.mean(residual ** 2)
+        features.extend([mean_abs, std, energy])
+        noise_stds.append(std)
+
+    # Cross-scale consistency: low for authentic blocks, variable for splices
+    features.append(np.std(noise_stds))
+
+    return np.array(features, dtype=np.float64)
